@@ -1,0 +1,6 @@
+config/*.conf
+cache/
+data/
+__pycache__/
+*.swp
+factors/namespace/
