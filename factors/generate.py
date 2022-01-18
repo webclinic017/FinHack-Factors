@@ -51,7 +51,7 @@ class generate:
     def generateFunctionMap(row):
         factor_fields=row['return_fileds'].split(',')
         for factor_field in factor_fields:
-            print('-'+factor_field)
+            #print('-'+factor_field)
             fmap={
                 'factor_filed':factor_field,
                 'func_id':row['id'],
