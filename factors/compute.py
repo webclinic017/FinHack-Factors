@@ -5,7 +5,10 @@ import pandas as pd
 import os
 from importlib import import_module
 import re
+import datetime
 from pandarallel import pandarallel
+import numpy as np
+
 class compute():
  
         
@@ -14,36 +17,47 @@ class compute():
         pandarallel.initialize(progress_bar=True)
         mysql.exec("drop table if exists factors_all_tmp",'factors')
         df_code= AStock.getStockCodeList(db)
+        order = np.random.permutation(df_code.shape[0])
+        #通过随机排列调整DataFrame各行顺序
+        df_code = df_code.take(order)
+        #print(df_code)
         df_all=df_code.parallel_apply(compute.computeAllFactorsByStock,axis=1)
+        #df_all=df_code.apply(compute.computeAllFactorsByStock,axis=1)
         compute.putData('factors_all','factors_all_tmp','factors')
 
     def computeOne(list_name,factor_list,ts_code,db='tushare'):
             ts_code=ts_code['ts_code']
+            
             df_price=AStock.getStockDailyPriceByCode(ts_code,db)
-            df_result=df_price.copy()
-            #df=pd.DataFrame()
+            #df_result=df_price.copy()
+            df=pd.DataFrame()
 
+
+            #这里要处理同名函数冲突的问题，目前重复计算。
             for row in factor_list:
-                df=pd.DataFrame() #总冲突，放下来每次重新计算吧
+                #df=pd.DataFrame() #总冲突，放下来每次重新计算吧
                 
                 # exit();
                 factor_name=row['name']
                 factor=factor_name.split('_')
-                df_price_copy=df_price.copy()
-                if not factor_name in df.columns:#原来是factor[0]，同名函数冲突，暂时改成函数名
-                    df=compute.computeFactorByStock(ts_code,factor_name,df_price_copy,'factors')
+                #df_price_copy=df_price.copy()
+                if not factor_name in df_price.columns:#原来是factor[0]，同名函数冲突，暂时改成函数名
+                    df_price=compute.computeFactorByStock(ts_code,factor_name,df_price,'factors')
                 else:
                     #print(factor[0])
                     pass
                 if(df_price.empty):
                     continue
-                df_result[factor_name]=df[factor_name]
-                engine=mysql.getDBEngine('factors') 
-                res = df_result.to_sql('factors_'+list_name+'_tmp', engine, index=False, if_exists='append', chunksize=5000)
+                #df_result[factor_name]=df[factor_name]
+                #print(df_price.columns)
+            # exit()
+            engine=mysql.getDBEngine('factors') 
+            #print(ts_code)
+            res = df_price.to_sql('factors_'+list_name+'_tmp', engine, index=False, if_exists='append', chunksize=5000)
  
                 #print(df_result)
  
-                return df_result
+            return df_price
 
     def computeList(list_name,factor_list,code_list=pd.DataFrame(),db='tushare'):
         if code_list.empty:
@@ -88,6 +102,7 @@ class compute():
 
 
     def computeFactorByStock(ts_code,factor_name,df_price,db='tushare'):
+        starttime = datetime.datetime.now()
         if(df_price.empty):
             df_price=AStock.getStockDailyPriceByCode(ts_code,'tushare')
             df_result=df_price.copy()
@@ -120,16 +135,35 @@ class compute():
         func=getattr(module,func_map['func_name'])
  
  
+
+ 
         for i in range(1,len(factor)):
             factor[i]=int(factor[i])
+            
+        # print(df_price)
+        # exit()
         df=func(df_price,factor)
         # print(df)
         # print(factor_name)
         # print(factor[0])
         #exit()
-        df[factor_name]=df[factor[0]]
         
- 
+        
+        suffix=factor
+        suffix.pop(0)
+        suffix='_'.join('%s' %p for p in suffix)
+        
+
+        for f in rlist:
+            if not f+'_'+suffix in df.columns:
+            #if not f in ["open","high","low","close"]:
+                df.rename(columns={f:f+'_'+suffix},inplace=True)
+        #df=df.add_suffix('_'+suffix)
+        
+        endtime = datetime.datetime.now()
+        runtime= str(endtime - starttime)  
+        #print(factor_name+":"+runtime)
+
         return df
         
 
